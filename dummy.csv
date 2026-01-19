@@ -1,0 +1,11 @@
+id,name,role,department,joined_date,salary
+1,Alice Johnson,Developer,Engineering,2023-01-15,85000
+2,Bob Smith,Manager,Sales,2022-05-20,72000
+3,Charlie Brown,Designer,Marketing,2023-03-10,65000
+4,Diana Prince,Developer,Engineering,2021-11-05,92000
+5,Evan Wright,Analyst,Finance,2022-08-14,78000
+6,Fiona Gallagher,HR Specialist,HR,2020-02-28,68000
+7,George Miller,Support,Operations,2023-06-01,55000
+8,Hannah Abbott,Developer,Engineering,2022-12-12,88000
+9,Ian Malcolm,Consultant,External,2023-04-22,120000
+10,Julia Roberts,Director,Management,2019-03-15,150000
