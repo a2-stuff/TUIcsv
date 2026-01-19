@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.3] - 2026-01-18
+### Added
+- **Exit Confirmation**: Added a confirmation dialog when quitting the application (`q` or `Ctrl+C`).
+
+### Changed
+- **Key Bindings**: Switched shortcuts to Control-based keys (`Ctrl+s`, `Ctrl+l`) for better cross-platform compatibility (especially macOS).
+- **UI Visibility**: Fixed text visibility issues in Search and Export inputs by enforcing high-contrast styling and increasing input height.
+- **Labels**: Updated UI buttons to display the correct `Ctrl+` shortcuts.
+
+## [1.3.2] - 2026-01-18
+### Added
+- **Animations**: Added spinner animations for file loading and exporting operations.
+- **Shortcuts**: Added Alt+Key bindings for Search (`Alt+s`, `Alt+c`, `Alt+x`) and Export (`Alt+s`, `Alt+x`) dialogs.
+- **UI Improvements**: Reorganized Settings dialog layout and improved Input box visibility (increased height).
+- **Restart Alert**: Added a prompt to restart the application when changing themes.
+
+### Changed
+- **File Manager**: Added explicit "Cancel" button and proper ESC key handling.
+- **Search/Export**: Replaced simple prompts with robust forms containing Cancel buttons and navigation support.
+
 ## [1.3.1] - 2026-01-18
 ### Changed
 - Updated author information to `@not_jarod`.

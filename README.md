@@ -12,6 +12,7 @@ A robust, terminal-based user interface (TUI) application for viewing, filtering
 - **Export**: Export your filtered and sorted view to a new CSV file.
 - **Persistent Settings**: Remembers your column preferences per file and global app settings.
 - **Theming**: Includes multiple color themes (Dark, Ocean, Sunset, Retro, Matrix, High Contrast).
+- **Animations**: Loading spinners and smooth interactions.
 - **Mouse Support**: Fully clickable interface.
 
 ## Requirements
@@ -60,6 +61,11 @@ tuicsv path/to/your/file.csv
 - **Menu Access**: Click the top menu bar or use hotkeys.
 - **Select/Sort**: `Enter` to select or sort a column.
 - **Quit**: `q`, `Ctrl+C`, or select `Quit` from the menu.
+
+#### Dialog Shortcuts
+- **Save/Search**: `Ctrl+s`
+- **Cancel**: `Escape`
+- **Clear**: `Ctrl+l`
 
 ## Configuration
 

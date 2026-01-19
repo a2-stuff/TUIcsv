@@ -103,6 +103,34 @@ let searchQuery = '';
 let scrollIndex = 0;
 let tableHeight = 0;
 
+// --- Animations ---
+const SPINNERS = {
+  dots: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
+  line: ['-', '\\', '|', '/'],
+  grow: [' ', '▃', '▄', '▅', '▆', '▇', '█', '▇', '▆', '▅', '▄', '▃']
+};
+
+let spinnerInterval;
+function startSpinner(msg = 'Working') {
+  let frame = 0;
+  if (spinnerInterval) clearInterval(spinnerInterval);
+  statusBar.style.bg = 'yellow';
+  statusBar.style.fg = 'black';
+  spinnerInterval = setInterval(() => {
+    statusBar.setContent(` ${SPINNERS.dots[frame % SPINNERS.dots.length]} ${msg}... `);
+    screen.render();
+    frame++;
+  }, 80);
+}
+
+function stopSpinner(msg = 'Ready') {
+  if (spinnerInterval) clearInterval(spinnerInterval);
+  statusBar.style.bg = theme.base.bg;
+  statusBar.style.fg = theme.base.fg;
+  statusBar.setContent(` ${msg} `);
+  screen.render();
+}
+
 // --- UI Setup ---
 const screen = blessed.screen({
   smartCSR: true,
@@ -171,7 +199,10 @@ function applyTheme(newThemeName) {
   menuBar.items.forEach(item => item.style = theme.menu.item);
   table.style.header = theme.tableHeader;
   table.style.cell = theme.tableCell;
-  statusBar.style = { bg: theme.base.bg, fg: theme.base.fg };
+  
+  if (!spinnerInterval) {
+    statusBar.style = { bg: theme.base.bg, fg: theme.base.fg };
+  }
   
   screen.render();
 }
@@ -182,31 +213,66 @@ function loadData(fileToLoad) {
     return;
   }
 
-  filename = fileToLoad;
-  configKey = filename.replace(/\./g, '_');
-  config.set('settings.lastFile', filename);
-  screen.title = `${APP_INFO.name} - ${path.basename(filename)}`;
-  statusBar.setContent(` Loading ${path.basename(filename)}... `);
-  screen.render();
+  startSpinner(`Loading ${path.basename(fileToLoad)}`);
 
-  const fileContent = fs.readFileSync(filename, 'utf8');
-  Papa.parse(fileContent, {
-    header: true,
-    skipEmptyLines: true,
-    complete: (results) => {
-      rawData = results.data;
-      headers = results.meta.fields || [];
-      
-      if (!config.has(`filePreferences.${configKey}`)) {
-        hiddenColumns = [];
-        config.set(`filePreferences.${configKey}.hiddenColumns`, []);
-      } else {
-        hiddenColumns = config.get(`filePreferences.${configKey}.hiddenColumns`);
-      }
-      
-      processData();
-      screen.render();
+  setImmediate(() => {
+    try {
+      filename = fileToLoad;
+      configKey = filename.replace(/\./g, '_');
+      config.set('settings.lastFile', filename);
+      screen.title = `${APP_INFO.name} - ${path.basename(filename)}`;
+
+      fs.readFile(filename, 'utf8', (err, fileContent) => {
+        if (err) {
+          stopSpinner('Error');
+          showErrorMessage(`Could not open file: ${err.message}`);
+          return;
+        }
+
+        Papa.parse(fileContent, {
+          header: true,
+          skipEmptyLines: true,
+          error: (err) => {
+            stopSpinner('Error');
+            showErrorMessage(`Error parsing CSV: ${err.message}`);
+          },
+          complete: (results) => {
+            rawData = results.data;
+            headers = results.meta.fields || [];
+            
+            if (!config.has(`filePreferences.${configKey}`)) {
+              hiddenColumns = [];
+              config.set(`filePreferences.${configKey}.hiddenColumns`, []);
+            } else {
+              hiddenColumns = config.get(`filePreferences.${configKey}.hiddenColumns`);
+            }
+            
+            processData();
+            stopSpinner(`Loaded ${rawData.length} rows`);
+            screen.render();
+          }
+        });
+      });
+    } catch (err) {
+      stopSpinner('Error');
+      showErrorMessage(`Unexpected error: ${err.message}`);
     }
+  });
+}
+
+function showErrorMessage(msg) {
+  const box = blessed.message({
+    parent: screen,
+    top: 'center',
+    left: 'center',
+    width: 'shrink',
+    height: 'shrink',
+    border: 'line',
+    label: ' Error ',
+    style: { border: { fg: 'red' }, bg: theme.base.bg, fg: 'red' }
+  });
+  box.display(msg, 0, () => {
+    if (rawData.length === 0) showFileManager();
   });
 }
 
@@ -265,8 +331,10 @@ function renderTable() {
   table.setData(tableData);
   
   // Update Status Bar
-  const percent = processedRows.length > 0 ? Math.round(((scrollIndex + visibleRows.length) / processedRows.length) * 100) : 0;
-  statusBar.setContent(` Rows: ${processedRows.length} | Visible: ${scrollIndex + 1}-${scrollIndex + visibleRows.length} (${percent}%) | Search: "${searchQuery}" `);
+  if (!spinnerInterval) {
+    const percent = processedRows.length > 0 ? Math.round(((scrollIndex + visibleRows.length) / processedRows.length) * 100) : 0;
+    statusBar.setContent(` Rows: ${processedRows.length} | Visible: ${scrollIndex + 1}-${scrollIndex + visibleRows.length} (${percent}%) | Search: "${searchQuery}" `);
+  }
   
   screen.render();
 }
@@ -329,25 +397,116 @@ table.on('wheelup', () => {
 // --- Features ---
 
 function showSearchPrompt() {
-  const prompt = blessed.prompt({
+  const form = blessed.form({
     parent: screen,
     top: 'center',
     left: 'center',
-    height: 'shrink',
-    width: 'shrink',
+    width: '50%',
+    height: 12, // Increased height to fit larger input
     border: 'line',
     label: ' Search ',
     keys: true,
-    mouse: true,
     style: { bg: theme.base.bg, fg: theme.base.fg }
   });
 
-  prompt.input('Search term (empty to clear):', searchQuery, (err, value) => {
-    if (value !== null) { // null if cancelled
-        searchQuery = value || '';
-        processData();
+  const input = blessed.textbox({
+    parent: form,
+    top: 1,
+    left: 2,
+    right: 2,
+    height: 3, // Height 3 is required for borders + text
+    name: 'search',
+    label: ' Search Term ',
+    value: searchQuery,
+    inputOnFocus: true,
+    keys: true,
+    border: { type: 'line' },
+    style: {
+        fg: 'white',
+        bg: 'black',
+        focus: {
+            fg: 'white',
+            bg: 'black',
+            border: { fg: 'cyan' }
+        }
     }
   });
+  
+  // Pre-fill with existing query
+  input.setValue(searchQuery);
+
+  const searchBtn = blessed.button({
+    parent: form,
+    bottom: 1,
+    right: 2,
+    content: ' Search (Ctrl+s) ',
+    style: { bg: 'green', fg: 'black', focus: { bg: 'lightgreen' } },
+    keys: true,
+    mouse: true,
+    shrink: true,
+    padding: { left: 1, right: 1 }
+  });
+  
+  const clearBtn = blessed.button({
+    parent: form,
+    bottom: 1,
+    left: 'center',
+    content: ' Clear (Ctrl+l) ',
+    style: { bg: 'yellow', fg: 'black', focus: { bg: 'lightyellow' } },
+    keys: true,
+    mouse: true,
+    shrink: true,
+    padding: { left: 1, right: 1 }
+  });
+
+  const cancelBtn = blessed.button({
+      parent: form,
+      bottom: 1,
+      left: 2,
+      content: ' Cancel (Esc) ',
+      style: { bg: 'red', fg: 'white', focus: { bg: 'lightred' } },
+      mouse: true,
+      shrink: true,
+      padding: { left: 1, right: 1 }
+  });
+
+  // Handlers
+  const doSearch = () => {
+    searchQuery = input.getValue() || '';
+    processData();
+    screen.remove(form);
+    screen.render();
+  };
+
+  const doClear = () => {
+      searchQuery = '';
+      processData();
+      screen.remove(form);
+      screen.render();
+  };
+  
+  const doCancel = () => {
+      screen.remove(form);
+      screen.render();
+  };
+
+  input.key('enter', doSearch);
+  searchBtn.on('press', doSearch);
+  clearBtn.on('press', doClear);
+  cancelBtn.on('press', doCancel);
+  
+  // Control keys (More reliable on Mac than Alt)
+  form.key(['C-s'], doSearch);
+  form.key(['C-l'], doClear);
+  
+  input.key(['C-s'], doSearch);
+  input.key(['C-l'], doClear);
+  
+  form.key(['escape'], doCancel);
+
+  screen.append(form);
+  input.focus();
+  screen.render();
 }
 
 function showFileManager() {
@@ -358,7 +517,7 @@ function showFileManager() {
     width: '60%',
     height: '60%',
     border: 'line',
-    label: ' Select CSV File ',
+    label: ' Select CSV File (Esc to Cancel) ',
     cwd: process.cwd(),
     keys: true,
     mouse: true,
@@ -373,13 +532,32 @@ function showFileManager() {
     }
   });
 
+  const cancelBtn = blessed.button({
+    parent: fm,
+    bottom: 0,
+    right: 1,
+    content: ' Cancel ',
+    style: { bg: 'red', fg: 'white', focus: { bg: 'lightred' } },
+    keys: true,
+    mouse: true,
+    shrink: true
+  });
+
+  cancelBtn.on('press', () => {
+    screen.remove(fm);
+    screen.render();
+  });
+
   fm.on('file', (file) => {
     if (file.endsWith('.csv')) {
       screen.remove(fm);
       loadData(file);
+    } else {
+      showErrorMessage('Invalid file type. Please select a .csv file.');
     }
   });
   
+  // Explicitly handle cancel keys
   fm.key(['escape', 'q'], () => {
     screen.remove(fm);
     screen.render();
@@ -408,6 +586,8 @@ function showInfo() {
   const infoText = `
   {bold}${APP_INFO.name}{/bold}
   Version: ${APP_INFO.version}
+  Creator: ${APP_INFO.author}
+  Github: ${APP_INFO.contact}
   
   Use Arrow Keys to scroll.
   Search filters data globally.
@@ -524,12 +704,13 @@ function showSettings() {
     parent: screen,
     top: 'center',
     left: 'center',
-    width: '50%',
-    height: '60%',
+    width: '70%',
+    height: '80%',
     border: 'line',
     label: ' Settings ',
     keys: true,
-    style: { bg: theme.base.bg }
+    style: { bg: theme.base.bg, fg: theme.base.fg },
+    shadow: true
   });
 
   const borderCheck = blessed.checkbox({
@@ -555,7 +736,7 @@ function showSettings() {
     parent: form,
     top: 4,
     left: 2,
-    height: 4,
+    height: 10,
     width: '90%',
     items: Object.keys(THEMES),
     keys: true,
@@ -564,27 +745,41 @@ function showSettings() {
       item: { fg: theme.base.fg, bg: theme.base.bg },
       selected: theme.selected
     },
-    border: 'line'
+    border: 'line',
+    scrollbar: { ch: ' ' }
   });
   
+  const initialTheme = currentThemeName;
   const themeIndex = Object.keys(THEMES).indexOf(currentThemeName);
   if (themeIndex >= 0) themeList.select(themeIndex);
 
   const resetBtn = blessed.button({
       parent: form,
-      bottom: 4,
+      bottom: 1,
       left: 2,
-      content: ' Reset All Settings ',
+      content: ' Reset All ',
       style: { bg: 'red', fg: 'white', focus: { bg: 'lightred' } },
       mouse: true,
-      shrink: true
+      shrink: true,
+      padding: { left: 1, right: 1 }
+  });
+
+  const cancelBtn = blessed.button({
+      parent: form,
+      bottom: 1,
+      right: 18,
+      content: ' Cancel ',
+      style: { bg: 'yellow', fg: 'black', focus: { bg: 'lightyellow' } },
+      mouse: true,
+      shrink: true,
+      padding: { left: 1, right: 1 }
   });
 
   const saveBtn = blessed.button({
     parent: form,
     bottom: 1,
-    left: 'center',
-    content: ' Save & Close ',
+    right: 2,
+    content: ' Save ',
     style: { bg: 'green', fg: 'black', focus: { bg: 'lightgreen' } },
     keys: true,
     mouse: true,
@@ -592,10 +787,33 @@ function showSettings() {
     padding: { left: 1, right: 1 }
   });
 
+  cancelBtn.on('press', () => {
+      screen.remove(form);
+      screen.render();
+  });
+
   saveBtn.on('press', () => {
       form.submit();
       const selectedTheme = themeList.getItem(themeList.selected).content;
+      
       applyTheme(selectedTheme);
+      screen.remove(form);
+      
+      if (selectedTheme !== initialTheme) {
+        const msg = blessed.message({ 
+          parent: screen, 
+          top: 'center', 
+          left: 'center', 
+          width: '50%',
+          border: 'line',
+          style: { bg: 'blue', fg: 'white' }
+        });
+        msg.display('Theme updated!\nPlease restart the app if you see visual artifacts.', 3, () => {
+            screen.render();
+        });
+      } else {
+        screen.render();
+      }
   });
   
   resetBtn.on('press', () => {
@@ -609,8 +827,6 @@ function showSettings() {
     config.set('settings.showBorders', data.showBorders);
     if (data.showBorders) table.border = { type: 'line' };
     else table.border = { type: 'bg' };
-    screen.remove(form);
-    screen.render();
   });
   
   form.key(['escape'], () => {
@@ -624,46 +840,144 @@ function showSettings() {
 }
 
 function exportData() {
-  const prompt = blessed.prompt({
+  const form = blessed.form({
     parent: screen,
     top: 'center',
     left: 'center',
-    height: 'shrink',
-    width: 'shrink',
+    width: '50%',
+    height: 12, // Increased height
     border: 'line',
     label: ' Export Filename ',
+    keys: true,
+    style: { bg: theme.base.bg, fg: theme.base.fg }
+  });
+
+  const input = blessed.textbox({
+    parent: form,
+    top: 1,
+    left: 2,
+    right: 2,
+    height: 3, // Fix visibility
+    name: 'filename',
+    label: ' Filename ',
+    value: 'export.csv',
+    inputOnFocus: true,
+    keys: true,
+    border: { type: 'line' },
+    style: {
+        fg: 'white',
+        bg: 'black',
+        focus: {
+            fg: 'white',
+            bg: 'black',
+            border: { fg: 'cyan' }
+        }
+    }
+  });
+
+  // Pre-fill
+  input.setValue('export.csv');
+
+  const saveBtn = blessed.button({
+    parent: form,
+    bottom: 1,
+    right: 2,
+    content: ' Save (Ctrl+s) ',
+    style: { bg: 'green', fg: 'black', focus: { bg: 'lightgreen' } },
+    keys: true,
+    mouse: true,
+    shrink: true,
+    padding: { left: 1, right: 1 }
+  });
+  
+  const cancelBtn = blessed.button({
+    parent: form,
+    bottom: 1,
+    left: 2,
+    content: ' Cancel (Esc) ',
+    style: { bg: 'red', fg: 'white', focus: { bg: 'lightred' } },
+    mouse: true,
+    shrink: true,
+    padding: { left: 1, right: 1 }
+  });
+
+  const doExport = () => {
+    const value = input.getValue();
+    if (value) {
+        screen.remove(form);
+        startSpinner('Saving');
+        
+        setTimeout(() => {
+            const visibleHeaders = headers.filter(h => !hiddenColumns.includes(h));
+            const exportData = processedRows.map(row => {
+                const newRow = {};
+                visibleHeaders.forEach(h => newRow[h] = row[h]);
+                return newRow;
+            });
+            
+            const csv = Papa.unparse(exportData);
+            fs.writeFileSync(value, csv);
+            
+            stopSpinner('Saved');
+            
+            const msg = blessed.message({
+                parent: screen,
+                top: 'center',
+                left: 'center',
+                height: 'shrink',
+                width: '50%',
+                border: 'line'
+            });
+            msg.display(`Exported to ${value}`, 2, () => {});
+        }, 100);
+    }
+  };
+  
+  const doCancel = () => {
+      screen.remove(form);
+      screen.render();
+  };
+
+  input.key('enter', doExport);
+  saveBtn.on('press', doExport);
+  cancelBtn.on('press', doCancel);
+  
+  // Control keys
+  form.key(['C-s'], doExport);
+  input.key(['C-s'], doExport);
+  
+  form.key(['escape'], doCancel);
+
+  screen.append(form);
+  input.focus();
+  screen.render();
+}
+
+// --- Key Bindings ---
+function confirmQuit() {
+  const question = blessed.question({
+    parent: screen,
+    top: 'center',
+    left: 'center',
+    width: '30%',
+    height: 'shrink',
+    border: 'line',
+    label: ' Confirm Exit ',
     keys: true,
     mouse: true,
     style: { bg: theme.base.bg, fg: theme.base.fg }
   });
 
-  prompt.input('Filename:', 'export.csv', (err, value) => {
+  question.ask('Are you sure you want to quit?', (err, value) => {
     if (value) {
-        const visibleHeaders = headers.filter(h => !hiddenColumns.includes(h));
-        const exportData = processedRows.map(row => {
-            const newRow = {};
-            visibleHeaders.forEach(h => newRow[h] = row[h]);
-            return newRow;
-        });
-        
-        const csv = Papa.unparse(exportData);
-        fs.writeFileSync(value, csv);
-        
-        const msg = blessed.message({
-            parent: screen,
-            top: 'center',
-            left: 'center',
-            height: 'shrink',
-            width: '50%',
-            border: 'line'
-        });
-        msg.display(`Exported to ${value}`, 2, () => {});
+      process.exit(0);
+    } else {
+      screen.render();
     }
   });
 }
 
-// --- Key Bindings ---
-screen.key(['q', 'C-c'], () => process.exit(0));
+screen.key(['q', 'C-c'], () => confirmQuit());
 
 // --- Start ---
 // Initial resize handler to set table height correctly before render
