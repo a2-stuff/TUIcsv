@@ -2,6 +2,8 @@
 
 A robust, terminal-based user interface (TUI) application for viewing, filtering, searching, and managing CSV files directly from your command line. Built with Node.js, it offers a rich interactive experience with persistent settings, theming support, and virtualization for large files.
 
+![TUIcsv Demo](./TUIcsv.gif)
+
 ## Features
 
 - **Interactive Table View**: Scrollable and navigable table interface optimized for large CSV datasets (Virtual Scrolling).
