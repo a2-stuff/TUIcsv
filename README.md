@@ -1,10 +1,11 @@
-# CSV TUI Viewer
+# TUIcsv Viewer
 
-A robust, terminal-based user interface (TUI) application for viewing, filtering, and managing CSV files directly from your command line. Built with Node.js, it offers a rich interactive experience with persistent settings and theming support.
+A robust, terminal-based user interface (TUI) application for viewing, filtering, searching, and managing CSV files directly from your command line. Built with Node.js, it offers a rich interactive experience with persistent settings, theming support, and virtualization for large files.
 
 ## Features
 
-- **Interactive Table View**: Scrollable and navigable table interface for large CSV datasets.
+- **Interactive Table View**: Scrollable and navigable table interface optimized for large CSV datasets (Virtual Scrolling).
+- **Search**: Global search functionality to quickly filter rows.
 - **File Manager**: Built-in file explorer to browse and open `.csv` files dynamically.
 - **Column Filtering**: Toggle visibility of specific columns to focus on relevant data.
 - **Sorting**: Sort data by any column in Ascending or Descending order.
@@ -23,7 +24,7 @@ A robust, terminal-based user interface (TUI) application for viewing, filtering
 
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/yourusername/TUIcsv.git
+    git clone https://github.com/a2-stuff/TUIcsv.git
     cd TUIcsv
     ```
 
@@ -55,7 +56,7 @@ tuicsv path/to/your/file.csv
 
 ### Key Bindings & Controls
 
-- **Navigation**: Arrow Keys (`Up`, `Down`, `Left`, `Right`) or `Vi` keys (`h`, `j`, `k`, `l`).
+- **Navigation**: Arrow Keys (`Up`, `Down`, `Left`, `Right`), `PageUp`/`PageDown`, `Home`/`End`, or `Vi` keys (`h`, `j`, `k`, `l`).
 - **Menu Access**: Click the top menu bar or use hotkeys.
 - **Select/Sort**: `Enter` to select or sort a column.
 - **Quit**: `q`, `Ctrl+C`, or select `Quit` from the menu.
@@ -73,6 +74,10 @@ Change the visual style in the **Settings** menu. Available themes:
 - **Retro**
 - **Matrix**
 - **High Contrast**
+
+## Author
+
+Created by [@not_jarod](https://github.com/a2-stuff/TUIcsv).
 
 ## License
 

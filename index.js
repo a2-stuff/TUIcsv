@@ -21,9 +21,9 @@ const config = new Conf({
 
 const APP_INFO = {
   name: 'TUIcsv Viewer',
-  version: '1.3.0',
-  author: 'Gemini CLI Agent',
-  contact: 'gemini-agent@example.com'
+  version: '1.3.1',
+  author: '@not_jarod',
+  contact: 'https://github.com/a2-stuff/TUIcsv'
 };
 
 const THEMES = {

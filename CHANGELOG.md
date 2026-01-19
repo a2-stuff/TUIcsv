@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2026-01-18
+### Changed
+- Updated author information to `@not_jarod`.
+- Updated contact information to GitHub repository.
+- Updated application title to "TUIcsv Viewer" with dynamic filename display.
+
+## [1.3.0] - 2026-01-18
+### Added
+- **Search**: Global search functionality to filter rows by text.
+- **Performance**: Implemented virtual scrolling to handle large CSV files efficiently.
+- **Status Bar**: Added a bottom status bar showing row counts and search status.
+
+### Changed
+- Optimized table rendering to only draw visible rows.
+- Updated key bindings (PageUp/Down, Home/End) to support virtual scrolling.
+
 ## [1.2.0] - 2026-01-18
 ### Added
 - **Themes**: Added "Ocean", "Sunset", and "Retro" color themes.
