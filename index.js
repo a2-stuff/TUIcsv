@@ -13,15 +13,15 @@ const config = new Conf({
     settings: {
       showBorders: true,
       lastFile: null,
-      theme: 'dark' // Set dark as default
+      theme: 'dark'
     },
     filePreferences: {}
   }
 });
 
 const APP_INFO = {
-  name: 'CSV TUI Viewer',
-  version: '1.2.0',
+  name: 'TUIcsv Viewer',
+  version: '1.3.0',
   author: 'Gemini CLI Agent',
   contact: 'gemini-agent@example.com'
 };
@@ -35,7 +35,7 @@ const THEMES = {
     tableCell: { fg: 'gray', selected: { bg: 'white', fg: 'black' } },
     menu: { bg: 'black', item: { bg: 'black', fg: 'white' }, selected: { bg: 'white', fg: 'black' } }
   },
-  default: { // Kept for legacy compatibility, looks like 'classic blue'
+  default: {
     base: { bg: 'blue', fg: 'white' },
     header: { fg: 'blue', bold: true },
     selected: { bg: 'cyan', fg: 'black' },
@@ -52,7 +52,7 @@ const THEMES = {
     menu: { bg: 'cyan', item: { bg: 'cyan', fg: 'black' }, selected: { bg: 'blue', fg: 'white' } }
   },
   sunset: {
-    base: { bg: '#2b0000', fg: 'yellow' }, // Deep red background
+    base: { bg: '#2b0000', fg: 'yellow' },
     header: { fg: 'red', bold: true },
     selected: { bg: 'yellow', fg: 'red' },
     tableHeader: { fg: 'yellow', bold: true },
@@ -60,7 +60,7 @@ const THEMES = {
     menu: { bg: '#2b0000', item: { bg: '#2b0000', fg: 'yellow' }, selected: { bg: 'yellow', fg: '#2b0000' } }
   },
   retro: {
-    base: { bg: 'black', fg: 'yellow' }, // Amber monochrome style
+    base: { bg: 'black', fg: 'yellow' },
     header: { fg: 'yellow', bold: true },
     selected: { bg: 'yellow', fg: 'black' },
     tableHeader: { fg: 'yellow', bold: true },
@@ -86,19 +86,22 @@ const THEMES = {
 };
 
 let currentThemeName = config.get('settings.theme');
-// Fallback if the saved theme name doesn't exist in the new list (e.g. from older version)
 let theme = THEMES[currentThemeName] || THEMES.dark;
 
-// Get filename from args or last opened or default
 let filename = process.argv[2] || config.get('settings.lastFile');
 let configKey = filename ? filename.replace(/\./g, '_') : 'default';
 
 // --- Global State ---
 let rawData = [];
 let headers = [];
-let currentData = [];
+let processedRows = []; // Filtered & Sorted rows (Array of Objects)
 let sortConfig = { column: null, direction: 'asc' };
 let hiddenColumns = [];
+let searchQuery = '';
+
+// Virtual Scrolling State
+let scrollIndex = 0;
+let tableHeight = 0;
 
 // --- UI Setup ---
 const screen = blessed.screen({
@@ -119,6 +122,7 @@ const menuBar = blessed.listbar({
   style: theme.menu,
   items: {
     'Open': showFileManager,
+    'Search': showSearchPrompt,
     'Filter Cols': toggleColumnFilter,
     'Sort': toggleSortMenu,
     'Export': exportData,
@@ -133,9 +137,9 @@ const table = blessed.listtable({
   top: 1,
   left: 0,
   width: '100%',
-  height: '100%-1',
+  height: '100%-2', // Leave room for status bar
   keys: true,
-  mouse: true,
+  mouse: true, // We handle scrolling manually, but mouse selection needs this
   vi: true,
   align: 'left',
   tags: true,
@@ -143,12 +147,17 @@ const table = blessed.listtable({
   style: {
     header: theme.tableHeader,
     cell: theme.tableCell
-  },
-  scrollbar: {
-    ch: ' ',
-    track: { bg: 'grey' },
-    style: { inverse: true }
   }
+});
+
+const statusBar = blessed.box({
+  parent: screen,
+  bottom: 0,
+  left: 0,
+  width: '100%',
+  height: 1,
+  content: ' Loading... ',
+  style: { bg: theme.base.bg, fg: theme.base.fg }
 });
 
 // --- Logic ---
@@ -158,22 +167,17 @@ function applyTheme(newThemeName) {
   theme = THEMES[currentThemeName];
   config.set('settings.theme', currentThemeName);
 
-  // Update styles
   menuBar.style = theme.menu;
-  menuBar.items.forEach(item => {
-      // Internal blessed hack to update listbar items
-      item.style = theme.menu.item;
-  });
-  
+  menuBar.items.forEach(item => item.style = theme.menu.item);
   table.style.header = theme.tableHeader;
   table.style.cell = theme.tableCell;
+  statusBar.style = { bg: theme.base.bg, fg: theme.base.fg };
   
   screen.render();
 }
 
 function loadData(fileToLoad) {
   if (!fileToLoad || !fs.existsSync(fileToLoad)) {
-    // If no file, just show file manager
     showFileManager();
     return;
   }
@@ -181,6 +185,9 @@ function loadData(fileToLoad) {
   filename = fileToLoad;
   configKey = filename.replace(/\./g, '_');
   config.set('settings.lastFile', filename);
+  screen.title = `${APP_INFO.name} - ${path.basename(filename)}`;
+  statusBar.setContent(` Loading ${path.basename(filename)}... `);
+  screen.render();
 
   const fileContent = fs.readFileSync(filename, 'utf8');
   Papa.parse(fileContent, {
@@ -204,36 +211,144 @@ function loadData(fileToLoad) {
 }
 
 function processData() {
-  const visibleHeaders = headers.filter(h => !hiddenColumns.includes(h));
-  
-  let processed = [...rawData];
+  // 1. Filter Rows (Search)
+  let processed = rawData;
+  if (searchQuery) {
+    const lowerQuery = searchQuery.toLowerCase();
+    processed = rawData.filter(row => {
+      return Object.values(row).some(val => 
+        String(val).toLowerCase().includes(lowerQuery)
+      );
+    });
+  }
+
+  // 2. Sort Data
   if (sortConfig.column) {
     processed.sort((a, b) => {
       let valA = a[sortConfig.column];
       let valB = b[sortConfig.column];
-      
       if (!isNaN(valA) && !isNaN(valB)) {
         valA = Number(valA);
         valB = Number(valB);
       }
-
       if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
       if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
   }
 
+  processedRows = processed;
+  scrollIndex = 0; // Reset scroll on new data
+  renderTable();
+}
+
+function renderTable() {
+  const visibleHeaders = headers.filter(h => !hiddenColumns.includes(h));
+  
+  // Calculate viewport
+  // listtable height includes borders and header. 
+  // We need to know how many data rows fit.
+  // Approximation: height - 2 (borders) - 1 (header)
+  // But blessed handles borders internally. 
+  // Safe bet: screen.height - 4 (menu + status + borders)
+  const availableHeight = table.height - 3; // Rough estimate
+  tableHeight = Math.max(5, availableHeight);
+
+  // Slice data for virtualization
+  const visibleRows = processedRows.slice(scrollIndex, scrollIndex + tableHeight);
+  
   const tableData = [visibleHeaders];
-  processed.forEach(row => {
+  visibleRows.forEach(row => {
     tableData.push(visibleHeaders.map(h => row[h]));
   });
 
-  currentData = tableData;
   table.setData(tableData);
-  table.focus();
+  
+  // Update Status Bar
+  const percent = processedRows.length > 0 ? Math.round(((scrollIndex + visibleRows.length) / processedRows.length) * 100) : 0;
+  statusBar.setContent(` Rows: ${processedRows.length} | Visible: ${scrollIndex + 1}-${scrollIndex + visibleRows.length} (${percent}%) | Search: "${searchQuery}" `);
+  
+  screen.render();
 }
 
+// --- Input Handling for Virtual Scrolling ---
+
+// We override default navigation to handle virtual scrolling
+table.key(['up', 'k'], () => {
+  if (scrollIndex > 0) {
+    scrollIndex--;
+    renderTable();
+  }
+});
+
+table.key(['down', 'j'], () => {
+  if (scrollIndex + tableHeight < processedRows.length) {
+    scrollIndex++;
+    renderTable();
+  }
+});
+
+table.key(['pageup', 'C-b'], () => {
+  scrollIndex = Math.max(0, scrollIndex - tableHeight);
+  renderTable();
+});
+
+table.key(['pagedown', 'C-f'], () => {
+  scrollIndex = Math.min(processedRows.length - tableHeight, scrollIndex + tableHeight);
+  // Ensure we don't go out of bounds if length < height
+  if (scrollIndex < 0) scrollIndex = 0; 
+  renderTable();
+});
+
+table.key(['home', 'g'], () => {
+  scrollIndex = 0;
+  renderTable();
+});
+
+table.key(['end', 'G'], () => {
+  scrollIndex = Math.max(0, processedRows.length - tableHeight);
+  renderTable();
+});
+
+// Also handle wheel (mouse support)
+table.on('wheeldown', () => {
+    if (scrollIndex + tableHeight < processedRows.length) {
+        scrollIndex++;
+        renderTable();
+    }
+});
+
+table.on('wheelup', () => {
+    if (scrollIndex > 0) {
+        scrollIndex--;
+        renderTable();
+    }
+});
+
+
 // --- Features ---
+
+function showSearchPrompt() {
+  const prompt = blessed.prompt({
+    parent: screen,
+    top: 'center',
+    left: 'center',
+    height: 'shrink',
+    width: 'shrink',
+    border: 'line',
+    label: ' Search ',
+    keys: true,
+    mouse: true,
+    style: { bg: theme.base.bg, fg: theme.base.fg }
+  });
+
+  prompt.input('Search term (empty to clear):', searchQuery, (err, value) => {
+    if (value !== null) { // null if cancelled
+        searchQuery = value || '';
+        processData();
+    }
+  });
+}
 
 function showFileManager() {
   const fm = blessed.filemanager({
@@ -270,7 +385,7 @@ function showFileManager() {
     screen.render();
   });
 
-  fm.refresh(); // Refresh to show files
+  fm.refresh(); 
   screen.append(fm);
   fm.focus();
   screen.render();
@@ -293,10 +408,10 @@ function showInfo() {
   const infoText = `
   {bold}${APP_INFO.name}{/bold}
   Version: ${APP_INFO.version}
-  Created by: ${APP_INFO.author}
-  Contact: ${APP_INFO.contact}
   
-  Settings are saved automatically.
+  Use Arrow Keys to scroll.
+  Search filters data globally.
+  
   Press {bold}Enter{/bold} or Click to close.
   `;
   
@@ -428,7 +543,6 @@ function showSettings() {
     style: { fg: theme.base.fg, bg: theme.base.bg }
   });
   
-  // Theme Selector
   blessed.text({
     parent: form,
     top: 3,
@@ -453,14 +567,8 @@ function showSettings() {
     border: 'line'
   });
   
-  // Pre-select current theme
   const themeIndex = Object.keys(THEMES).indexOf(currentThemeName);
   if (themeIndex >= 0) themeList.select(themeIndex);
-
-  themeList.on('select', (item) => {
-    // Just select, don't apply yet until save? Or apply immediately?
-    // Let's apply on Save for consistency
-  });
 
   const resetBtn = blessed.button({
       parent: form,
@@ -531,7 +639,14 @@ function exportData() {
 
   prompt.input('Filename:', 'export.csv', (err, value) => {
     if (value) {
-        const csv = Papa.unparse(currentData);
+        const visibleHeaders = headers.filter(h => !hiddenColumns.includes(h));
+        const exportData = processedRows.map(row => {
+            const newRow = {};
+            visibleHeaders.forEach(h => newRow[h] = row[h]);
+            return newRow;
+        });
+        
+        const csv = Papa.unparse(exportData);
         fs.writeFileSync(value, csv);
         
         const msg = blessed.message({
@@ -551,4 +666,9 @@ function exportData() {
 screen.key(['q', 'C-c'], () => process.exit(0));
 
 // --- Start ---
+// Initial resize handler to set table height correctly before render
+screen.on('resize', () => {
+    renderTable();
+});
+
 loadData(filename);
