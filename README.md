@@ -14,6 +14,7 @@ A robust, terminal-based user interface (TUI) application for viewing, filtering
 - **Export**: Export your filtered and sorted view to a new CSV file.
 - **Persistent Settings**: Remembers your column preferences per file and global app settings.
 - **Theming**: Includes multiple color themes (Dark, Ocean, Sunset, Retro, Matrix, High Contrast).
+- **Internationalization**: Full support for English, Spanish, and Portuguese languages.
 - **Animations**: Loading spinners and smooth interactions.
 - **Mouse Support**: Fully clickable interface.
 
@@ -84,10 +85,19 @@ Change the visual style in the **Settings** menu. Available themes:
 - **Matrix**
 - **High Contrast**
 
+## Languages
+
+The application supports multiple languages. Change the language in the **Settings** menu:
+- **English** (Default)
+- **Español** (Spanish)
+- **Português** (Portuguese)
+
+All UI elements, menus, dialogs, and messages are fully translated. Your language preference is saved and persists across sessions.
+
 ## Author
 
 Created by [@not_jarod](https://github.com/a2-stuff/TUIcsv).
 
 ## License
 
-ISC License
+MIT License

@@ -5,6 +5,7 @@ const path = require('path');
 const blessed = require('blessed');
 const Papa = require('papaparse');
 const Conf = require('conf');
+const { t, availableLanguages, translations } = require('./translations');
 
 // --- Configuration & Setup ---
 const config = new Conf({
@@ -13,7 +14,8 @@ const config = new Conf({
     settings: {
       showBorders: true,
       lastFile: null,
-      theme: 'dark'
+      theme: 'dark',
+      language: 'en'
     },
     filePreferences: {}
   }
@@ -21,7 +23,7 @@ const config = new Conf({
 
 const APP_INFO = {
   name: 'TUIcsv Viewer',
-  version: '1.3.1',
+  version: '1.4.0',
   author: '@not_jarod',
   contact: 'https://github.com/a2-stuff/TUIcsv'
 };
@@ -87,6 +89,7 @@ const THEMES = {
 
 let currentThemeName = config.get('settings.theme');
 let theme = THEMES[currentThemeName] || THEMES.dark;
+let currentLang = config.get('settings.language') || 'en';
 
 let filename = process.argv[2] || config.get('settings.lastFile');
 let configKey = filename ? filename.replace(/\./g, '_') : 'default';
@@ -149,14 +152,14 @@ const menuBar = blessed.listbar({
   autoCommandKeys: true,
   style: theme.menu,
   items: {
-    'Open': showFileManager,
-    'Search': showSearchPrompt,
-    'Filter Cols': toggleColumnFilter,
-    'Sort': toggleSortMenu,
-    'Export': exportData,
-    'Info': showInfo,
-    'Settings': showSettings,
-    'Quit': () => process.exit(0)
+    [t('menuOpen', currentLang)]: showFileManager,
+    [t('menuSearch', currentLang)]: showSearchPrompt,
+    [t('menuFilterCols', currentLang)]: toggleColumnFilter,
+    [t('menuSort', currentLang)]: toggleSortMenu,
+    [t('menuExport', currentLang)]: exportData,
+    [t('menuInfo', currentLang)]: showInfo,
+    [t('menuSettings', currentLang)]: showSettings,
+    [t('menuQuit', currentLang)]: () => process.exit(0)
   }
 });
 
@@ -184,11 +187,25 @@ const statusBar = blessed.box({
   left: 0,
   width: '100%',
   height: 1,
-  content: ' Loading... ',
+  content: ` ${t('statusLoading', currentLang)} `,
   style: { bg: theme.base.bg, fg: theme.base.fg }
 });
 
 // --- Logic ---
+
+function updateMenuBar() {
+  menuBar.setItems({
+    [t('menuOpen', currentLang)]: showFileManager,
+    [t('menuSearch', currentLang)]: showSearchPrompt,
+    [t('menuFilterCols', currentLang)]: toggleColumnFilter,
+    [t('menuSort', currentLang)]: toggleSortMenu,
+    [t('menuExport', currentLang)]: exportData,
+    [t('menuInfo', currentLang)]: showInfo,
+    [t('menuSettings', currentLang)]: showSettings,
+    [t('menuQuit', currentLang)]: () => process.exit(0)
+  });
+  screen.render();
+}
 
 function applyTheme(newThemeName) {
   currentThemeName = newThemeName;
@@ -199,11 +216,11 @@ function applyTheme(newThemeName) {
   menuBar.items.forEach(item => item.style = theme.menu.item);
   table.style.header = theme.tableHeader;
   table.style.cell = theme.tableCell;
-  
+
   if (!spinnerInterval) {
     statusBar.style = { bg: theme.base.bg, fg: theme.base.fg };
   }
-  
+
   screen.render();
 }
 
@@ -213,7 +230,7 @@ function loadData(fileToLoad) {
     return;
   }
 
-  startSpinner(`Loading ${path.basename(fileToLoad)}`);
+  startSpinner(`${t('loadingFile', currentLang)} ${path.basename(fileToLoad)}`);
 
   setImmediate(() => {
     try {
@@ -224,8 +241,8 @@ function loadData(fileToLoad) {
 
       fs.readFile(filename, 'utf8', (err, fileContent) => {
         if (err) {
-          stopSpinner('Error');
-          showErrorMessage(`Could not open file: ${err.message}`);
+          stopSpinner(t('statusError', currentLang));
+          showErrorMessage(`${t('errorFileOpen', currentLang)} ${err.message}`);
           return;
         }
 
@@ -233,29 +250,29 @@ function loadData(fileToLoad) {
           header: true,
           skipEmptyLines: true,
           error: (err) => {
-            stopSpinner('Error');
-            showErrorMessage(`Error parsing CSV: ${err.message}`);
+            stopSpinner(t('statusError', currentLang));
+            showErrorMessage(`${t('errorParsing', currentLang)} ${err.message}`);
           },
           complete: (results) => {
             rawData = results.data;
             headers = results.meta.fields || [];
-            
+
             if (!config.has(`filePreferences.${configKey}`)) {
               hiddenColumns = [];
               config.set(`filePreferences.${configKey}.hiddenColumns`, []);
             } else {
               hiddenColumns = config.get(`filePreferences.${configKey}.hiddenColumns`);
             }
-            
+
             processData();
-            stopSpinner(`Loaded ${rawData.length} rows`);
+            stopSpinner(`${t('loadedRows', currentLang)} ${rawData.length} ${t('loadedRowsSuffix', currentLang)}`);
             screen.render();
           }
         });
       });
     } catch (err) {
-      stopSpinner('Error');
-      showErrorMessage(`Unexpected error: ${err.message}`);
+      stopSpinner(t('statusError', currentLang));
+      showErrorMessage(`${t('errorUnexpected', currentLang)} ${err.message}`);
     }
   });
 }
@@ -268,7 +285,7 @@ function showErrorMessage(msg) {
     width: 'shrink',
     height: 'shrink',
     border: 'line',
-    label: ' Error ',
+    label: ` ${t('errorTitle', currentLang)} `,
     style: { border: { fg: 'red' }, bg: theme.base.bg, fg: 'red' }
   });
   box.display(msg, 0, () => {
@@ -282,7 +299,7 @@ function processData() {
   if (searchQuery) {
     const lowerQuery = searchQuery.toLowerCase();
     processed = rawData.filter(row => {
-      return Object.values(row).some(val => 
+      return Object.values(row).some(val =>
         String(val).toLowerCase().includes(lowerQuery)
       );
     });
@@ -310,7 +327,7 @@ function processData() {
 
 function renderTable() {
   const visibleHeaders = headers.filter(h => !hiddenColumns.includes(h));
-  
+
   // Calculate viewport
   // listtable height includes borders and header. 
   // We need to know how many data rows fit.
@@ -322,20 +339,20 @@ function renderTable() {
 
   // Slice data for virtualization
   const visibleRows = processedRows.slice(scrollIndex, scrollIndex + tableHeight);
-  
+
   const tableData = [visibleHeaders];
   visibleRows.forEach(row => {
     tableData.push(visibleHeaders.map(h => row[h]));
   });
 
   table.setData(tableData);
-  
+
   // Update Status Bar
   if (!spinnerInterval) {
     const percent = processedRows.length > 0 ? Math.round(((scrollIndex + visibleRows.length) / processedRows.length) * 100) : 0;
-    statusBar.setContent(` Rows: ${processedRows.length} | Visible: ${scrollIndex + 1}-${scrollIndex + visibleRows.length} (${percent}%) | Search: "${searchQuery}" `);
+    statusBar.setContent(` ${t('statusRows', currentLang)}: ${processedRows.length} | ${t('statusVisible', currentLang)}: ${scrollIndex + 1}-${scrollIndex + visibleRows.length} (${percent}%) | ${t('statusSearch', currentLang)}: "${searchQuery}" `);
   }
-  
+
   screen.render();
 }
 
@@ -364,7 +381,7 @@ table.key(['pageup', 'C-b'], () => {
 table.key(['pagedown', 'C-f'], () => {
   scrollIndex = Math.min(processedRows.length - tableHeight, scrollIndex + tableHeight);
   // Ensure we don't go out of bounds if length < height
-  if (scrollIndex < 0) scrollIndex = 0; 
+  if (scrollIndex < 0) scrollIndex = 0;
   renderTable();
 });
 
@@ -380,17 +397,17 @@ table.key(['end', 'G'], () => {
 
 // Also handle wheel (mouse support)
 table.on('wheeldown', () => {
-    if (scrollIndex + tableHeight < processedRows.length) {
-        scrollIndex++;
-        renderTable();
-    }
+  if (scrollIndex + tableHeight < processedRows.length) {
+    scrollIndex++;
+    renderTable();
+  }
 });
 
 table.on('wheelup', () => {
-    if (scrollIndex > 0) {
-        scrollIndex--;
-        renderTable();
-    }
+  if (scrollIndex > 0) {
+    scrollIndex--;
+    renderTable();
+  }
 });
 
 
@@ -402,9 +419,9 @@ function showSearchPrompt() {
     top: 'center',
     left: 'center',
     width: '50%',
-    height: 12, // Increased height to fit larger input
+    height: 12,
     border: 'line',
-    label: ' Search ',
+    label: ` ${t('searchTitle', currentLang)} `,
     keys: true,
     style: { bg: theme.base.bg, fg: theme.base.fg }
   });
@@ -414,24 +431,24 @@ function showSearchPrompt() {
     top: 1,
     left: 2,
     right: 2,
-    height: 3, // Height 3 is required for borders + text
+    height: 3,
     name: 'search',
-    label: ' Search Term ',
+    label: ` ${t('searchLabel', currentLang)} `,
     value: searchQuery,
     inputOnFocus: true,
     keys: true,
     border: { type: 'line' },
     style: {
+      fg: 'white',
+      bg: 'black',
+      focus: {
         fg: 'white',
         bg: 'black',
-        focus: {
-            fg: 'white',
-            bg: 'black',
-            border: { fg: 'cyan' }
-        }
+        border: { fg: 'cyan' }
+      }
     }
   });
-  
+
   // Pre-fill with existing query
   input.setValue(searchQuery);
 
@@ -439,19 +456,19 @@ function showSearchPrompt() {
     parent: form,
     bottom: 1,
     right: 2,
-    content: ' Search (Ctrl+s) ',
+    content: ` ${t('searchButton', currentLang)} `,
     style: { bg: 'green', fg: 'black', focus: { bg: 'lightgreen' } },
     keys: true,
     mouse: true,
     shrink: true,
     padding: { left: 1, right: 1 }
   });
-  
+
   const clearBtn = blessed.button({
     parent: form,
     bottom: 1,
     left: 'center',
-    content: ' Clear (Ctrl+l) ',
+    content: ` ${t('searchClear', currentLang)} `,
     style: { bg: 'yellow', fg: 'black', focus: { bg: 'lightyellow' } },
     keys: true,
     mouse: true,
@@ -460,14 +477,14 @@ function showSearchPrompt() {
   });
 
   const cancelBtn = blessed.button({
-      parent: form,
-      bottom: 1,
-      left: 2,
-      content: ' Cancel (Esc) ',
-      style: { bg: 'red', fg: 'white', focus: { bg: 'lightred' } },
-      mouse: true,
-      shrink: true,
-      padding: { left: 1, right: 1 }
+    parent: form,
+    bottom: 1,
+    left: 2,
+    content: ` ${t('searchCancel', currentLang)} `,
+    style: { bg: 'red', fg: 'white', focus: { bg: 'lightred' } },
+    mouse: true,
+    shrink: true,
+    padding: { left: 1, right: 1 }
   });
 
   // Handlers
@@ -479,29 +496,29 @@ function showSearchPrompt() {
   };
 
   const doClear = () => {
-      searchQuery = '';
-      processData();
-      screen.remove(form);
-      screen.render();
+    searchQuery = '';
+    processData();
+    screen.remove(form);
+    screen.render();
   };
-  
+
   const doCancel = () => {
-      screen.remove(form);
-      screen.render();
+    screen.remove(form);
+    screen.render();
   };
 
   input.key('enter', doSearch);
   searchBtn.on('press', doSearch);
   clearBtn.on('press', doClear);
   cancelBtn.on('press', doCancel);
-  
+
   // Control keys (More reliable on Mac than Alt)
   form.key(['C-s'], doSearch);
   form.key(['C-l'], doClear);
-  
+
   input.key(['C-s'], doSearch);
   input.key(['C-l'], doClear);
-  
+
   form.key(['escape'], doCancel);
 
   screen.append(form);
@@ -517,7 +534,7 @@ function showFileManager() {
     width: '60%',
     height: '60%',
     border: 'line',
-    label: ' Select CSV File (Esc to Cancel) ',
+    label: ` ${t('fileManagerTitle', currentLang)} `,
     cwd: process.cwd(),
     keys: true,
     mouse: true,
@@ -536,7 +553,7 @@ function showFileManager() {
     parent: fm,
     bottom: 0,
     right: 1,
-    content: ' Cancel ',
+    content: ` ${t('fileManagerCancel', currentLang)} `,
     style: { bg: 'red', fg: 'white', focus: { bg: 'lightred' } },
     keys: true,
     mouse: true,
@@ -553,17 +570,17 @@ function showFileManager() {
       screen.remove(fm);
       loadData(file);
     } else {
-      showErrorMessage('Invalid file type. Please select a .csv file.');
+      showErrorMessage(t('fileManagerInvalidType', currentLang));
     }
   });
-  
+
   // Explicitly handle cancel keys
   fm.key(['escape', 'q'], () => {
     screen.remove(fm);
     screen.render();
   });
 
-  fm.refresh(); 
+  fm.refresh();
   screen.append(fm);
   fm.focus();
   screen.render();
@@ -577,25 +594,22 @@ function showInfo() {
     width: '50%',
     height: 'shrink',
     border: 'line',
-    label: ' App Info ',
+    label: ` ${t('infoTitle', currentLang)} `,
     tags: true,
     hidden: true,
     style: { bg: theme.base.bg, fg: theme.base.fg }
   });
-  
+
   const infoText = `
   {bold}${APP_INFO.name}{/bold}
-  Version: ${APP_INFO.version}
-  Creator: ${APP_INFO.author}
-  Github: ${APP_INFO.contact}
+  ${t('infoVersion', currentLang)}: ${APP_INFO.version}
+  ${t('infoCreator', currentLang)}: ${APP_INFO.author}
+  ${t('infoGithub', currentLang)}: ${APP_INFO.contact}
   
-  Use Arrow Keys to scroll.
-  Search filters data globally.
-  
-  Press {bold}Enter{/bold} or Click to close.
+  ${t('infoInstructions', currentLang)}
   `;
-  
-  box.display(infoText, 0, () => {});
+
+  box.display(infoText, 0, () => { });
 }
 
 function toggleColumnFilter() {
@@ -606,7 +620,7 @@ function toggleColumnFilter() {
     width: '50%',
     height: '80%',
     border: 'line',
-    label: ' Toggle Columns (Space to toggle, Enter to save) ',
+    label: ` ${t('columnFilterTitle', currentLang)} `,
     keys: true,
     style: { bg: theme.base.bg, fg: theme.base.fg }
   });
@@ -630,7 +644,7 @@ function toggleColumnFilter() {
     parent: form,
     bottom: 1,
     left: 'center',
-    content: ' Save ',
+    content: ` ${t('columnFilterSave', currentLang)} `,
     style: { bg: 'green', fg: 'black', focus: { bg: 'lightgreen' } },
     keys: true,
     mouse: true,
@@ -666,7 +680,7 @@ function toggleSortMenu() {
     width: '40%',
     height: '60%',
     border: 'line',
-    label: ' Select Column to Sort ',
+    label: ` ${t('sortTitle', currentLang)} `,
     keys: true,
     mouse: true,
     items: headers,
@@ -688,7 +702,7 @@ function toggleSortMenu() {
     screen.remove(list);
     screen.render();
   });
-  
+
   list.key(['escape'], () => {
     screen.remove(list);
     screen.render();
@@ -707,7 +721,7 @@ function showSettings() {
     width: '70%',
     height: '80%',
     border: 'line',
-    label: ' Settings ',
+    label: ` ${t('settingsTitle', currentLang)} `,
     keys: true,
     style: { bg: theme.base.bg, fg: theme.base.fg },
     shadow: true
@@ -718,25 +732,25 @@ function showSettings() {
     top: 1,
     left: 2,
     name: 'showBorders',
-    content: 'Show Table Borders',
+    content: t('settingsBorders', currentLang),
     checked: config.get('settings.showBorders'),
     mouse: true,
     style: { fg: theme.base.fg, bg: theme.base.bg }
   });
-  
+
   blessed.text({
     parent: form,
     top: 3,
     left: 2,
-    content: 'Select Theme:',
+    content: t('settingsTheme', currentLang),
     style: { fg: theme.base.fg, bg: theme.base.bg }
   });
-  
+
   const themeList = blessed.list({
     parent: form,
     top: 4,
     left: 2,
-    height: 10,
+    height: 7,
     width: '90%',
     items: Object.keys(THEMES),
     keys: true,
@@ -748,38 +762,67 @@ function showSettings() {
     border: 'line',
     scrollbar: { ch: ' ' }
   });
-  
+
   const initialTheme = currentThemeName;
   const themeIndex = Object.keys(THEMES).indexOf(currentThemeName);
   if (themeIndex >= 0) themeList.select(themeIndex);
 
+  blessed.text({
+    parent: form,
+    top: 12,
+    left: 2,
+    content: t('settingsLanguage', currentLang),
+    style: { fg: theme.base.fg, bg: theme.base.bg }
+  });
+
+  const languageList = blessed.list({
+    parent: form,
+    top: 13,
+    left: 2,
+    height: 5,
+    width: '90%',
+    items: availableLanguages.map(lang => t(`languages.${lang}`, currentLang)),
+    keys: true,
+    mouse: true,
+    style: {
+      item: { fg: theme.base.fg, bg: theme.base.bg },
+      selected: theme.selected
+    },
+    border: 'line',
+    scrollbar: { ch: ' ' }
+  });
+
+  const initialLang = currentLang;
+  const langIndex = availableLanguages.indexOf(currentLang);
+  if (langIndex >= 0) languageList.select(langIndex);
+
   const resetBtn = blessed.button({
-      parent: form,
-      bottom: 1,
-      left: 2,
-      content: ' Reset All (Ctrl+r) ',
-      style: { bg: 'red', fg: 'white', focus: { bg: 'lightred' } },
-      mouse: true,
-      shrink: true,
-      padding: { left: 1, right: 1 }
+    parent: form,
+    bottom: 1,
+    left: 2,
+    content: ` ${t('settingsReset', currentLang)} `,
+    style: { bg: 'red', fg: 'white', focus: { bg: 'lightred' } },
+    mouse: true,
+    shrink: true,
+    padding: { left: 1, right: 1 }
   });
 
   const cancelBtn = blessed.button({
-      parent: form,
-      bottom: 1,
-      right: 22,
-      content: ' Cancel (Esc) ',
-      style: { bg: 'yellow', fg: 'black', focus: { bg: 'lightyellow' } },
-      mouse: true,
-      shrink: true,
-      padding: { left: 1, right: 1 }
+    parent: form,
+    bottom: 1,
+    right: 22,
+    content: ` ${t('settingsCancel', currentLang)} `,
+    style: { bg: 'yellow', fg: 'black', focus: { bg: 'lightyellow' } },
+    mouse: true,
+    shrink: true,
+    padding: { left: 1, right: 1 }
   });
 
   const saveBtn = blessed.button({
     parent: form,
     bottom: 1,
     right: 2,
-    content: ' Save (Ctrl+s) ',
+    content: ` ${t('settingsSave', currentLang)} `,
     style: { bg: 'green', fg: 'black', focus: { bg: 'lightgreen' } },
     keys: true,
     mouse: true,
@@ -788,39 +831,57 @@ function showSettings() {
   });
 
   const doCancel = () => {
-      screen.remove(form);
-      screen.render();
+    screen.remove(form);
+    screen.render();
   };
 
   const doSave = () => {
-      form.submit();
-      const selectedTheme = themeList.getItem(themeList.selected).content;
-      
-      applyTheme(selectedTheme);
-      screen.remove(form);
-      
-      if (selectedTheme !== initialTheme) {
-        const msg = blessed.message({ 
-          parent: screen, 
-          top: 'center', 
-          left: 'center', 
-          width: '50%',
-          border: 'line',
-          style: { bg: 'blue', fg: 'white' }
-        });
-        msg.display('Theme updated!\nPlease restart the app if you see visual artifacts.', 3, () => {
-            screen.render();
-        });
-      } else {
+    form.submit();
+    const selectedTheme = themeList.getItem(themeList.selected).content;
+    const selectedLangIndex = languageList.selected;
+    const selectedLang = availableLanguages[selectedLangIndex];
+
+    applyTheme(selectedTheme);
+
+    // Update language
+    if (selectedLang !== initialLang) {
+      currentLang = selectedLang;
+      config.set('settings.language', currentLang);
+      updateMenuBar();
+    }
+
+    screen.remove(form);
+
+    const messages = [];
+    if (selectedTheme !== initialTheme) {
+      messages.push(t('settingsThemeUpdated', currentLang));
+    }
+    if (selectedLang !== initialLang) {
+      messages.push(t('settingsLanguageUpdated', currentLang));
+    }
+
+    if (messages.length > 0) {
+      const msg = blessed.message({
+        parent: screen,
+        top: 'center',
+        left: 'center',
+        width: '50%',
+        border: 'line',
+        style: { bg: 'blue', fg: 'white' }
+      });
+      msg.display(messages.join('\n'), 3, () => {
         screen.render();
-      }
+      });
+    } else {
+      screen.render();
+    }
   };
 
   const doReset = () => {
-      config.clear();
-      screen.remove(form);
-      const msg = blessed.message({ parent: screen, top: 'center', left: 'center', border: 'line' });
-      msg.display('Settings Reset. Please restart app.', 2, () => {});
+    config.clear();
+    screen.remove(form);
+    const msg = blessed.message({ parent: screen, top: 'center', left: 'center', border: 'line' });
+    msg.display(t('settingsResetMessage', currentLang), 2, () => { });
   };
 
   cancelBtn.on('press', doCancel);
@@ -832,7 +893,7 @@ function showSettings() {
     if (data.showBorders) table.border = { type: 'line' };
     else table.border = { type: 'bg' };
   });
-  
+
   // Key bindings
   form.key(['escape'], doCancel);
   form.key(['C-s'], doSave);
@@ -849,9 +910,9 @@ function exportData() {
     top: 'center',
     left: 'center',
     width: '50%',
-    height: 12, // Increased height
+    height: 12,
     border: 'line',
-    label: ' Export Filename ',
+    label: ` ${t('exportTitle', currentLang)} `,
     keys: true,
     style: { bg: theme.base.bg, fg: theme.base.fg }
   });
@@ -861,21 +922,21 @@ function exportData() {
     top: 1,
     left: 2,
     right: 2,
-    height: 3, // Fix visibility
+    height: 3,
     name: 'filename',
-    label: ' Filename ',
+    label: ` ${t('exportLabel', currentLang)} `,
     value: 'export.csv',
     inputOnFocus: true,
     keys: true,
     border: { type: 'line' },
     style: {
+      fg: 'white',
+      bg: 'black',
+      focus: {
         fg: 'white',
         bg: 'black',
-        focus: {
-            fg: 'white',
-            bg: 'black',
-            border: { fg: 'cyan' }
-        }
+        border: { fg: 'cyan' }
+      }
     }
   });
 
@@ -886,19 +947,19 @@ function exportData() {
     parent: form,
     bottom: 1,
     right: 2,
-    content: ' Save (Ctrl+s) ',
+    content: ` ${t('exportButton', currentLang)} `,
     style: { bg: 'green', fg: 'black', focus: { bg: 'lightgreen' } },
     keys: true,
     mouse: true,
     shrink: true,
     padding: { left: 1, right: 1 }
   });
-  
+
   const cancelBtn = blessed.button({
     parent: form,
     bottom: 1,
     left: 2,
-    content: ' Cancel (Esc) ',
+    content: ` ${t('exportCancel', currentLang)} `,
     style: { bg: 'red', fg: 'white', focus: { bg: 'lightred' } },
     mouse: true,
     shrink: true,
@@ -908,48 +969,48 @@ function exportData() {
   const doExport = () => {
     const value = input.getValue();
     if (value) {
-        screen.remove(form);
-        startSpinner('Saving');
-        
-        setTimeout(() => {
-            const visibleHeaders = headers.filter(h => !hiddenColumns.includes(h));
-            const exportData = processedRows.map(row => {
-                const newRow = {};
-                visibleHeaders.forEach(h => newRow[h] = row[h]);
-                return newRow;
-            });
-            
-            const csv = Papa.unparse(exportData);
-            fs.writeFileSync(value, csv);
-            
-            stopSpinner('Saved');
-            
-            const msg = blessed.message({
-                parent: screen,
-                top: 'center',
-                left: 'center',
-                height: 'shrink',
-                width: '50%',
-                border: 'line'
-            });
-            msg.display(`Exported to ${value}`, 2, () => {});
-        }, 100);
+      screen.remove(form);
+      startSpinner(t('statusSaving', currentLang));
+
+      setTimeout(() => {
+        const visibleHeaders = headers.filter(h => !hiddenColumns.includes(h));
+        const exportData = processedRows.map(row => {
+          const newRow = {};
+          visibleHeaders.forEach(h => newRow[h] = row[h]);
+          return newRow;
+        });
+
+        const csv = Papa.unparse(exportData);
+        fs.writeFileSync(value, csv);
+
+        stopSpinner(t('statusSaved', currentLang));
+
+        const msg = blessed.message({
+          parent: screen,
+          top: 'center',
+          left: 'center',
+          height: 'shrink',
+          width: '50%',
+          border: 'line'
+        });
+        msg.display(`${t('exportSuccess', currentLang)} ${value}`, 2, () => { });
+      }, 100);
     }
   };
-  
+
   const doCancel = () => {
-      screen.remove(form);
-      screen.render();
+    screen.remove(form);
+    screen.render();
   };
 
   input.key('enter', doExport);
   saveBtn.on('press', doExport);
   cancelBtn.on('press', doCancel);
-  
+
   // Control keys
   form.key(['C-s'], doExport);
   input.key(['C-s'], doExport);
-  
+
   form.key(['escape'], doCancel);
 
   screen.append(form);
@@ -966,13 +1027,13 @@ function confirmQuit() {
     width: '30%',
     height: 'shrink',
     border: 'line',
-    label: ' Confirm Exit ',
+    label: ` ${t('confirmExitTitle', currentLang)} `,
     keys: true,
     mouse: true,
     style: { bg: theme.base.bg, fg: theme.base.fg }
   });
 
-  question.ask('Are you sure you want to quit?', (err, value) => {
+  question.ask(t('confirmExitMessage', currentLang), (err, value) => {
     if (value) {
       process.exit(0);
     } else {
@@ -986,7 +1047,7 @@ screen.key(['q', 'C-c'], () => confirmQuit());
 // --- Start ---
 // Initial resize handler to set table height correctly before render
 screen.on('resize', () => {
-    renderTable();
+  renderTable();
 });
 
 loadData(filename);

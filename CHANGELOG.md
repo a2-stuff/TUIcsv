@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-01-19
+### Added
+- **Internationalization (i18n)**: Full multi-language support for English, Spanish, and Portuguese.
+- **Language Selector**: Added language selection in Settings menu with immediate UI updates.
+- **Translation System**: Created comprehensive translation module (`translations.js`) with all UI strings.
+- **Language Persistence**: Language preference is saved and restored across sessions.
+
+### Changed
+- **All UI Elements**: Updated all menus, dialogs, buttons, labels, and messages to use translatable strings.
+- **Settings Dialog**: Reorganized to accommodate language selector below theme selector.
+- **Menu Bar**: Dynamic menu updates when language is changed.
+- **Documentation**: Updated README with internationalization information.
+
 ## [1.3.4] - 2026-01-18
 ### Changed
 - **Settings View**: Added explicit keybindings in buttons (`Save`, `Reset`, `Cancel`).
