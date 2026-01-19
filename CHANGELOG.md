@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.4] - 2026-01-18
+### Changed
+- **Settings View**: Added explicit keybindings in buttons (`Save`, `Reset`, `Cancel`).
+- **Shortcuts**: Implemented keyboard shortcuts for Settings actions: `Ctrl+s` (Save), `Ctrl+r` (Reset), `Esc` (Cancel).
+
 ## [1.3.3] - 2026-01-18
 ### Added
 - **Exit Confirmation**: Added a confirmation dialog when quitting the application (`q` or `Ctrl+C`).

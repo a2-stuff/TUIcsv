@@ -62,10 +62,11 @@ tuicsv path/to/your/file.csv
 - **Select/Sort**: `Enter` to select or sort a column.
 - **Quit**: `q`, `Ctrl+C`, or select `Quit` from the menu.
 
-#### Dialog Shortcuts
-- **Save/Search**: `Ctrl+s`
-- **Cancel**: `Escape`
-- **Clear**: `Ctrl+l`
+65: #### Dialog Shortcuts
+66: - **Save/Search**: `Ctrl+s`
+67: - **Reset**: `Ctrl+r`
+68: - **Cancel**: `Escape`
+69: - **Clear**: `Ctrl+l`
 
 ## Configuration
 

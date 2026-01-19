@@ -757,7 +757,7 @@ function showSettings() {
       parent: form,
       bottom: 1,
       left: 2,
-      content: ' Reset All ',
+      content: ' Reset All (Ctrl+r) ',
       style: { bg: 'red', fg: 'white', focus: { bg: 'lightred' } },
       mouse: true,
       shrink: true,
@@ -767,8 +767,8 @@ function showSettings() {
   const cancelBtn = blessed.button({
       parent: form,
       bottom: 1,
-      right: 18,
-      content: ' Cancel ',
+      right: 22,
+      content: ' Cancel (Esc) ',
       style: { bg: 'yellow', fg: 'black', focus: { bg: 'lightyellow' } },
       mouse: true,
       shrink: true,
@@ -779,7 +779,7 @@ function showSettings() {
     parent: form,
     bottom: 1,
     right: 2,
-    content: ' Save ',
+    content: ' Save (Ctrl+s) ',
     style: { bg: 'green', fg: 'black', focus: { bg: 'lightgreen' } },
     keys: true,
     mouse: true,
@@ -787,12 +787,12 @@ function showSettings() {
     padding: { left: 1, right: 1 }
   });
 
-  cancelBtn.on('press', () => {
+  const doCancel = () => {
       screen.remove(form);
       screen.render();
-  });
+  };
 
-  saveBtn.on('press', () => {
+  const doSave = () => {
       form.submit();
       const selectedTheme = themeList.getItem(themeList.selected).content;
       
@@ -814,14 +814,18 @@ function showSettings() {
       } else {
         screen.render();
       }
-  });
-  
-  resetBtn.on('press', () => {
+  };
+
+  const doReset = () => {
       config.clear();
       screen.remove(form);
       const msg = blessed.message({ parent: screen, top: 'center', left: 'center', border: 'line' });
       msg.display('Settings Reset. Please restart app.', 2, () => {});
-  });
+  };
+
+  cancelBtn.on('press', doCancel);
+  saveBtn.on('press', doSave);
+  resetBtn.on('press', doReset);
 
   form.on('submit', (data) => {
     config.set('settings.showBorders', data.showBorders);
@@ -829,10 +833,10 @@ function showSettings() {
     else table.border = { type: 'bg' };
   });
   
-  form.key(['escape'], () => {
-      screen.remove(form);
-      screen.render();
-  });
+  // Key bindings
+  form.key(['escape'], doCancel);
+  form.key(['C-s'], doSave);
+  form.key(['C-r'], doReset);
 
   screen.append(form);
   themeList.focus();
